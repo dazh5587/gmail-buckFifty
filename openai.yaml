@@ -18,7 +18,7 @@ info:
   description: "Get names from emails, last contacted date, and relationship score."
   version: "1.0.0"
 # This field will be replaced by the deploy_api.sh script.
-host: "YOUR-PROJECT-ID.appspot.com"
+host: "gmail-integration-384916.appspot.com"
 schemes:
   - "https"
 paths:
