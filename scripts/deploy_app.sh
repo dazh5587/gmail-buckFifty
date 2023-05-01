@@ -44,7 +44,7 @@ cleanup() {
 }
 
 # Defaults.
-APP="../app/app_template.yaml"
+APP="../app/app.yaml"
 REGION="us-central"
 
 if [[ "$#" == 0 ]]; then
