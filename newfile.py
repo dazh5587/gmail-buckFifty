@@ -36,9 +36,8 @@ def result():
 @app.route("/getEmails", methods = ["GET"])
 
 def emails():
-    return "HI"
-    # res = getall()
-    # return res
+    res = getall()
+    return res
 
 
 
@@ -140,7 +139,6 @@ def getall():
 
 if __name__ == '__main__':
     app.run(debug = True, port=8000)
-    print ("UFUCK")
     # res = getall()
     # print (res)
     #service = get_service()
