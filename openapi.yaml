@@ -24,7 +24,7 @@ schemes:
 paths:
   "/getEmails":
     get:
-      description: "Get all Emails"
+      description: "Get all Emails here"
       operationId: "emailName"
       parameters:
         -
