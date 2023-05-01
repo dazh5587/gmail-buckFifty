@@ -140,18 +140,8 @@ def getall():
 
 if __name__ == '__main__':
     app.run(debug = True, port=8000)
+    print ("UFUCK")
     # res = getall()
     # print (res)
-    # datedict = {"Jan":1,"Feb":2, "Mar":3,"Apr":4, "May": 5, "Jun": 6, "Jul": 7, "Aug":8, "Sep":9,"Oct":10, "Nov":11, "Dec":12}
-    # string = "Wed, 19 Apr 2023 09:37:24 -0600"
-    # new = string.split(' ')
-    # secs = new[4].split(':')
-    # date_time = datetime.datetime(int(new[3]),datedict[new[2]],int(new[1]),int(secs[0]),int(secs[1]),int(secs[2]))
-    # print (date_time)
     #service = get_service()
-    #print (service.users().messages().list(userId = 'me').execute())
-    # searchMessages(service,"me")
-    ## print (emailCounts.keys())
-    # date_time = datetime.datetime(2023, 6, 3, 12, 0, 50)
-    # inUnix = (time.mktime(date_time.timetuple()))
-    # print (date_time, inUnix)
+    #print (service.users().messages().list(userId = 'me').execute())s
