@@ -30,7 +30,7 @@ paths:
         -
           name: iataCode
           in: query
-          required: true
+          required: False
           type: string
       responses:
         200:
@@ -38,4 +38,4 @@ paths:
           schema:
             type: string
         400:
-          description: "The IATA code is invalid or missing."
+          description: "Email API not working dummy"
