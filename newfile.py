@@ -139,9 +139,9 @@ def getall():
     return mydict
 
 if __name__ == '__main__':
-    #app.run(debug = True, port=8000)
-    res = getall()
-    print (res)
+    app.run(debug = True, port=8000)
+    # res = getall()
+    # print (res)
     # datedict = {"Jan":1,"Feb":2, "Mar":3,"Apr":4, "May": 5, "Jun": 6, "Jul": 7, "Aug":8, "Sep":9,"Oct":10, "Nov":11, "Dec":12}
     # string = "Wed, 19 Apr 2023 09:37:24 -0600"
     # new = string.split(' ')
