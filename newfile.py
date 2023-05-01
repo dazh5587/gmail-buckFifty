@@ -36,8 +36,9 @@ def result():
 @app.route("/getEmails", methods = ["GET"])
 
 def emails():
-    res = getall()
-    return res
+    return "HI"
+    # res = getall()
+    # return res
 
 
 
