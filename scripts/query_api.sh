@@ -25,7 +25,7 @@ main() {
   fi
   # Because our included app uses query string parameters, we can include
   # them directly in the URL.
-  QUERY="curl \"https://${project_id}.appspot.com/airportName?iataCode=${IATA_CODE}\""
+  QUERY="curl \"https://${project_id}.appspot.com/getEmail\""
   # First, (maybe) print the command so the user can see what's being executed.
   if [[ "$QUIET" == "false" ]]; then
     echo "$QUERY"
