@@ -1,2 +1,13 @@
+google==3.0.0
+google-api-core==2.11.0
+google-api-python-client==2.86.0
+google-auth==2.17.3
+google-auth-httplib2==0.1.0
+google-auth-oauthlib==1.0.0
+google-cloud==0.34.0
+google-cloud-vision==3.4.1
+googleapis-common-protos==1.59.0
 flask
 gunicorn
+sortedcollections @ file:///tmp/build/80754af9/sortedcollections_1611172717284/work
+sortedcontainers @ file:///tmp/build/80754af9/sortedcontainers_1623949099177/work
