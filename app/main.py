@@ -12,32 +12,32 @@ from collections import deque
 import datetime
 import time
 
-app = Flask(__name__)
+# app = Flask(__name__)
 
-@app.route("/result", methods = ["POST","GET"])
+# @app.route("/result", methods = ["POST","GET"])
 
-def result():
-    output = request.get_json(force = True)
-    if len(output.keys()) < 2:
-        return {"Status": "Bad response"}
-    if 'num1' and 'num2' in output:
-        num1 = int(output['num1'])
-        num2 = int(output['num2'])
-    else:
-        num1 = 1
-        num2 = 10
-    cal = {}
-    cal['addition'] = num1+num2
-    cal['subtraction'] = num1-num2
-    cal['multiplication'] = num1*num2
-    cal['division'] = num1/num2
-    return (cal)
+# def result():
+#     output = request.get_json(force = True)
+#     if len(output.keys()) < 2:
+#         return {"Status": "Bad response"}
+#     if 'num1' and 'num2' in output:
+#         num1 = int(output['num1'])
+#         num2 = int(output['num2'])
+#     else:
+#         num1 = 1
+#         num2 = 10
+#     cal = {}
+#     cal['addition'] = num1+num2
+#     cal['subtraction'] = num1-num2
+#     cal['multiplication'] = num1*num2
+#     cal['division'] = num1/num2
+#     return (cal)
     
-@app.route("/getEmails", methods = ["GET"])
+# @app.route("/getEmails", methods = ["GET"])
 
-def emails():
-    res = getall()
-    return res
+# def emails():
+#     res = getall()
+#     return res
 
 
 
@@ -139,7 +139,7 @@ class gmailAPI:
         try:
             mydict = {}
             searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox").execute() #get all emails in inbox
-            searchIDsent = service.users().messages().list(userId = user_id, q = 'from: david@favorably.app').execute() #get emails that I sent
+            searchIDsent = service.users().messages().list(userId = user_id, q = "in:sent").execute() #get emails that I sent
             def doThing(searchID, flag): #if flag = True, we're in inbox, look through from
                 number_results = searchID['resultSizeEstimate']
                 if number_results > 0:
@@ -262,6 +262,7 @@ class gmailAPI:
                 flow = InstalledAppFlow.from_client_secrets_file(
                     'credentials.json', self.SCOPES)
                 creds = flow.run_local_server(port=8000)
+                #creds = flow.run_console()
             # Save the credentials for the next run
             # with open('token.json', 'w') as token:
             #     token.write(creds.to_json())
@@ -279,5 +280,6 @@ if __name__ == '__main__':
     new = gmailAPI()
     res = new.getall()
     print (res)
+    # print (res['Anish Parikh'])
     #service = get_service()
     #print (service.users().messages().list(userId = 'me').execute())s
