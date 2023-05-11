@@ -27,11 +27,6 @@ badwords = set(["feedback", "hello", "news", "newsletters", "no-reply", "noreply
 letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 @app.route('/')
-def index():
-  emails = get_request()
-  return emails
-
-@app.route('/getEmails')
 def get_request():
     if 'credentials' not in flask.session:
         return flask.redirect('authorize')
@@ -40,7 +35,10 @@ def get_request():
     flask.session['credentials'] = credentials_to_dict(credentials)
     mydict = searchMessages(service,"me")
     return mydict
-
+@app.route('/test')
+def test():
+    return "HELLO IT WORKS"
+    
 @app.route('/authorize')
 def authorize():
     flow = Flow.from_client_secrets_file('credentials.json',scopes=['https://www.googleapis.com/auth/gmail.readonly'])
@@ -140,11 +138,6 @@ def getMessage(service,user_id,message_id):
                 curperson = ""
             else:
                 curperson+=cur+' '
-        # if fromPeople and fromPeople[0] == "fran dong":
-        #     print ("HERE",messageList['snippet'])
-        #print ("FROM: ", fromPeople)
-        # print ("TO: ", toPeople)
-        # print ("ORIGINAL: ", stringForm['To'])
         hasGoogleMeet = False
         if badwordflag:
             emailSubject = stringForm['Subject']
@@ -291,7 +284,4 @@ def searchMessages(service, user_id):
         print ("Error Occured: %s") %error
 if __name__ == '__main__':
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
-    app.run('localhost', 8000, debug=True)
-
-
-    
+    app.run('localhost', 8000)
