@@ -4,6 +4,7 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow, Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from google.cloud import language_v1
 import email
 import base64
 import flask
@@ -23,23 +24,11 @@ app = Flask(__name__)
 app.secret_key = '_hkj97m_1j!!c7*n'
 contactdict = {}
 datedict = {"Jan":1,"Feb":2, "Mar":3,"Apr":4, "May": 5, "Jun": 6, "Jul": 7, "Aug":8, "Sep":9,"Oct":10, "Nov":11, "Dec":12}
+days = set(['Mon,', "Tue,", "Wed,", "Thu,", "Fri,", "Sat,", "Sun,"])
 badwords = set(["feedback", "hello", "news", "newsletters", "no-reply", "noreply", "notifications", "notification", "team", "support", "billing", "info", "help", "newsletter", "blog", "updates"])
 letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
 @app.route('/')
-def get_request():
-    if 'credentials' not in flask.session:
-        return flask.redirect('authorize')
-    credentials = Credentials(**flask.session['credentials'])
-    service = build(API_SERVICE_NAME, API_VERSION, credentials=credentials)
-    flask.session['credentials'] = credentials_to_dict(credentials)
-    mydict = searchMessages(service,"me")
-    return mydict
-@app.route('/test')
-def test():
-    return "HELLO IT WORKS"
-    
-@app.route('/authorize')
 def authorize():
     flow = Flow.from_client_secrets_file('credentials.json',scopes=['https://www.googleapis.com/auth/gmail.readonly'])
     cur_url = flask.url_for('oauth2callback', _external=True)
@@ -51,6 +40,34 @@ def authorize():
     authorization_url, state = flow.authorization_url(access_type='offline',include_granted_scopes='true')
     flask.session['state'] = state
     return flask.redirect(authorization_url)
+
+@app.route('/getEmails')
+def get_request():
+    if 'credentials' not in flask.session:
+        #return "HELO"
+        return flask.redirect('authorize')
+    credentials = Credentials(**flask.session['credentials'])
+    service = build(API_SERVICE_NAME, API_VERSION, credentials=credentials)
+    flask.session['credentials'] = credentials_to_dict(credentials)
+    mydict = searchMessages(service,"me")
+    newdict = {}
+    for name in contactdict:
+        newdict[name] = [float('inf'),0,0,0,0,0,0,0]
+        for email in contactdict[name]:
+            if email in mydict:
+                arr = mydict[email]
+                newdict[name][0] = min(newdict[name][0],arr[0])
+                for i in range (1, len(arr)):
+                    newdict[name][i]+=arr[i]
+    res = {}
+    for x in newdict:
+        if newdict[x][6] > 0:
+            res[x] = newdict[x]
+    return res
+
+@app.route('/test')
+def test():
+    return "HELLO IT WORKS"
 
 @app.route('/oauth2callback')
 def oauth2callback():
@@ -89,13 +106,34 @@ def credentials_to_dict(credentials):
           'client_secret': credentials.client_secret,
           'scopes': credentials.scopes}
 
+def classify(text, verbose=True):
+    language_client = language_v1.LanguageServiceClient()
+
+    document = language_v1.Document(
+        content=text, type_=language_v1.Document.Type.PLAIN_TEXT
+    )
+    response = language_client.classify_text(request={"document": document})
+    categories = response.categories
+
+    result = {}
+
+    for category in categories:
+        result[category.name] = category.confidence
+
+    # if verbose:
+    #     print(text)
+    #     for category in categories:
+    #         print("=" * 20)
+    #         print("{:<16}: {}".format("category", category.name))
+    #         print("{:<16}: {}".format("confidence", category.confidence))
+    return result
 def getMessage(service,user_id,message_id):
     try:
         messageList = service.users().messages().get(userId = user_id, id = message_id, format = 'raw').execute()
         rawForm = base64.urlsafe_b64decode(messageList['raw'].encode('ASCII'))
         stringForm = email.message_from_bytes(rawForm)
         fromPerson = deque(stringForm['From'].split(' '))
-        fromPeople = []
+        fromEmails = []
         badwordflag = True
         curperson = ""
         while fromPerson:
@@ -109,17 +147,21 @@ def getMessage(service,user_id,message_id):
                     while cur and cur[-1] not in letters:
                         cur = cur[:-1]
                     if curperson:
-                        curperson = curperson[:-1]
-                        contactdict[cur] = curperson
-                        fromPeople.append(curperson)
-                    else:
-                        if cur in contactdict:
-                            fromPeople.append(contactdict[cur])
+                        while curperson and curperson[0] not in letters:
+                            curperson = curperson[1:]
+                        while curperson and curperson[-1] not in letters:
+                            curperson = curperson[:-1]
+                        if curperson:
+                            if curperson not in contactdict:
+                                contactdict[curperson] = set([cur])
+                            else:
+                                contactdict[curperson].add(cur)
+                        fromEmails.append(cur)
                 curperson = ""
             else:
                 curperson+=cur+' '
         toPerson = deque(stringForm['To'].split(' '))
-        toPeople = []
+        toEmails = []
         curperson = ""
         while toPerson:
             cur = toPerson.popleft()
@@ -129,33 +171,95 @@ def getMessage(service,user_id,message_id):
                 while cur and cur[-1] not in letters:
                     cur = cur[:-1]
                 if curperson:
-                    curperson = curperson[:-1]
-                    contactdict[cur] = curperson
-                    toPeople.append(curperson)
-                else:
-                    if cur in contactdict:
-                        toPeople.append(contactdict[cur])
+                    while curperson and curperson[0] not in letters:
+                        curperson = curperson[1:]
+                    while curperson and curperson[-1] not in letters:
+                        curperson = curperson[:-1]
+                    if curperson:
+                        if curperson not in contactdict:
+                            contactdict[curperson] = set([cur])
+                        else:
+                            contactdict[curperson].add(cur)
+                    toEmails.append(cur)
                 curperson = ""
             else:
                 curperson+=cur+' '
         hasGoogleMeet = False
         if badwordflag:
             emailSubject = stringForm['Subject']
+            bcc = stringForm['Bcc']
+            curperson = ""
+            if bcc:
+                bcc = deque(bcc.split(' '))
+                while bcc:
+                    cur = bcc.popleft()
+                    if '@' in cur:
+                        while cur and cur[0] not in letters:
+                            cur = cur[1:]
+                        while cur and cur[-1] not in letters:
+                            cur = cur[:-1]
+                        if curperson:
+                            curperson = curperson[:-1]
+                            if curperson not in contactdict:
+                                contactdict[curperson] = set([cur])
+                            else:
+                                contactdict[curperson].add(cur)
+                            toEmails.append(cur)
+                        curperson = ""
+                    else:
+                        curperson+=cur+' '
+            cc = stringForm['Cc']
+            curperson = ""
+            if cc:
+                cc = deque(cc.split(' '))
+                while cc:
+                    cur = cc.popleft()
+                    if '@' in cur:
+                        while cur and cur[0] not in letters:
+                            cur = cur[1:]
+                        while cur and cur[-1] not in letters:
+                            cur = cur[:-1]
+                        if curperson:
+                            while curperson and curperson[0] not in letters:
+                                curperson = curperson[1:]
+                            while curperson and curperson[-1] not in letters:
+                                curperson = curperson[:-1]
+                            if curperson:
+                                if curperson not in contactdict:
+                                    contactdict[curperson] = set([cur])
+                                else:
+                                    contactdict[curperson].add(cur)
+                            toEmails.append(cur)
+                        curperson = ""
+                    else:
+                        curperson+=cur+' '
             #print (fromPerson, toPerson, emailSubject, "HERE")
             date = stringForm['Date']
+            #print (date, "ORIG")
             new = date.split(' ')
-            secs = new[4].split(':')
-            date_time = datetime.datetime(int(new[3]),datedict[new[2]],int(new[1]),int(secs[0]),int(secs[1]),int(secs[2]))
-            regDate = datetime.date(int(new[3]),datedict[new[2]],int(new[1])) #year, month, day
+            #print (new, "HRERE")
+            if new[0] in days:
+                secs = new[4].split(':')
+                date_time = datetime.datetime(int(new[3]),datedict[new[2]],int(new[1]),int(secs[0]),int(secs[1]),int(secs[2]))
+                regDate = datetime.date(int(new[3]),datedict[new[2]],int(new[1])) #year, month, day
+            else:
+                secs = new[3].split(':')
+                date_time = datetime.datetime(int(new[2]),datedict[new[1]], int(new[0]), int(secs[0]),int(secs[1]),int(secs[2]))
+                regDate = datetime.date(int(new[2]),datedict[new[1]],int(new[0])) #year, month, day
             unixTime = (time.mktime(date_time.timetuple()))
-            if "Invitation" in emailSubject or "Updated Invitation" in emailSubject:
-                hasGoogleMeet = True
-            # contentTypes = stringForm.get_content_maintype()
-            # if contentTypes == 'multipart':
-            #     messageBody = stringForm.get_payload()[0].get_payload()
-            # else:
-            #     messageBody = stringForm.get_payload()
-            return (fromPeople, toPeople, unixTime, hasGoogleMeet, regDate)
+            if emailSubject:
+                if "Invitation" in emailSubject or "Updated Invitation" in emailSubject:
+                    hasGoogleMeet = True
+            contentTypes = stringForm.get_content_maintype()
+            if contentTypes == 'multipart':
+                messageBody = stringForm.get_payload()[0].get_payload()
+            else:
+                messageBody = stringForm.get_payload()
+            # if len(fromEmails) == 1 and fromEmails[0] == "anish@mellon.app":
+            #     #print (messageBody, "HERE")
+            #     x = classify(messageBody)
+            #     print (x, "HI")
+            return (fromEmails, toEmails, unixTime, hasGoogleMeet, regDate)
         else:
             return (None, None, None, None, None)
         #messageList is dictionary with keys
@@ -172,19 +276,18 @@ def getMessage(service,user_id,message_id):
 def searchMessages(service, user_id):
     try:
         mydict = {}
-        searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox").execute() #get all emails in inbox
-        searchIDsent = service.users().messages().list(userId = user_id, q = "in:sent").execute() #get emails that I sent
+        searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox", maxResults = 20000).execute() #get all emails in inbox
+        searchIDsent = service.users().messages().list(userId = user_id, q = "in:sent", maxResults = 20000).execute() #get emails that I sent
         def doThing(searchID, flag): #if flag = True, we're in inbox, look through from
             number_results = searchID['resultSizeEstimate']
             if number_results > 0:
                 message_ids = searchID['messages']
                 for ids in message_ids:
                     msg_id = ids['id']
-                    fromPeople,toPeople,lastcontactUnix,hasGoogleMeet,regDate = getMessage(service,user_id,msg_id)
-                    #print (fromPeople, toPeople, "HERE", flag)
-                    if flag: #going through inbox (so fromPeople)
-                        if fromPeople:
-                            for name in fromPeople:
+                    fromEmails,toEmails,lastcontactUnix,hasGoogleMeet,regDate = getMessage(service,user_id,msg_id)
+                    if flag: #going through inbox (so fromEmails)
+                        if fromEmails:
+                            for email in fromEmails:
                                 today = datetime.date.today()
                                 dif = (today-regDate).days
                                 onemonth = False
@@ -199,37 +302,37 @@ def searchMessages(service, user_id):
                                     oneyear,twoyear = True,True
                                 elif dif <= 730:
                                     twoyear = True
-                                if name not in mydict:
+                                if email not in mydict:
                                     #[last contact, last month, last 6 months, last year, last 2 years, totalreceived, totalsent, meetings]
-                                    mydict[name] = [lastcontactUnix,0,0,0,0,0,0,0]
+                                    mydict[email] = [lastcontactUnix,0,0,0,0,0,0,0]
                                     if onemonth:
-                                        mydict[name][1]+=1
+                                        mydict[email][1]+=1
                                     if sixmonth:
-                                        mydict[name][2]+=1
+                                        mydict[email][2]+=1
                                     if oneyear:
-                                        mydict[name][3]+=1
+                                        mydict[email][3]+=1
                                     if twoyear:
-                                        mydict[name][4]+=1
-                                    mydict[name][5]+=1
+                                        mydict[email][4]+=1
+                                    mydict[email][5]+=1
                                     if hasGoogleMeet:
-                                        mydict[name][7]+=1
+                                        mydict[email][7]+=1
 
                                 else:
-                                    mydict[name][0] = max(mydict[name][0],lastcontactUnix)
+                                    mydict[email][0] = max(mydict[email][0],lastcontactUnix)
                                     if onemonth:
-                                        mydict[name][1]+=1
+                                        mydict[email][1]+=1
                                     if sixmonth:
-                                        mydict[name][2]+=1
+                                        mydict[email][2]+=1
                                     if oneyear:
-                                        mydict[name][3]+=1
+                                        mydict[email][3]+=1
                                     if twoyear:
-                                        mydict[name][4]+=1
-                                    mydict[name][5]+=1
+                                        mydict[email][4]+=1
+                                    mydict[email][5]+=1
                                     if hasGoogleMeet:
-                                        mydict[name][7]+=1
-                    else: #if not flag, going through sent, so toPeople
-                        if toPeople:
-                            for name in toPeople:
+                                        mydict[email][7]+=1
+                    else: #if not flag, going through sent, so toEmail
+                        if toEmails:
+                            for email in toEmails:
                                 today = datetime.date.today()
                                 dif = (today-regDate).days
                                 onemonth = False
@@ -244,34 +347,34 @@ def searchMessages(service, user_id):
                                     oneyear,twoyear = True,True
                                 elif dif <= 730:
                                     twoyear = True
-                                if name not in mydict:
+                                if email not in mydict:
                                     #[last contact, last month, last 6 months, last year, last 2 years, totalreceived, totalsent, meetings]
-                                    mydict[name] = [lastcontactUnix,0,0,0,0,0,0,0]
+                                    mydict[email] = [lastcontactUnix,0,0,0,0,0,0,0]
                                     if onemonth:
-                                        mydict[name][1]+=1
+                                        mydict[email][1]+=1
                                     if sixmonth:
-                                        mydict[name][2]+=1
+                                        mydict[email][2]+=1
                                     if oneyear:
-                                        mydict[name][3]+=1
+                                        mydict[email][3]+=1
                                     if twoyear:
-                                        mydict[name][4]+=1
-                                    mydict[name][6]+=1
+                                        mydict[email][4]+=1
+                                    mydict[email][6]+=1
                                     if hasGoogleMeet:
-                                        mydict[name][7]+=1
+                                        mydict[email][7]+=1
 
                                 else:
-                                    mydict[name][0] = max(mydict[name][0],lastcontactUnix)
+                                    mydict[email][0] = max(mydict[email][0],lastcontactUnix)
                                     if onemonth:
-                                        mydict[name][1]+=1
+                                        mydict[email][1]+=1
                                     if sixmonth:
-                                        mydict[name][2]+=1
+                                        mydict[email][2]+=1
                                     if oneyear:
-                                        mydict[name][3]+=1
+                                        mydict[email][3]+=1
                                     if twoyear:
-                                        mydict[name][4]+=1
-                                    mydict[name][6]+=1
+                                        mydict[email][4]+=1
+                                    mydict[email][6]+=1
                                     if hasGoogleMeet:
-                                        mydict[name][1]+=1
+                                        mydict[email][1]+=1
 
         
             else:
@@ -282,6 +385,10 @@ def searchMessages(service, user_id):
 
     except HttpError as error:
         print ("Error Occured: %s") %error
+
 if __name__ == '__main__':
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
     app.run('localhost', 8000)
+    
+    # text = " fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex"
+    # print (classify(text))
