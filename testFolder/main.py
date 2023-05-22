@@ -67,7 +67,10 @@ def get_request():
 
 @app.route('/test')
 def test():
-    return "HELLO IT WORKS"
+    text = text = " fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex"
+
+    new = classify(text)
+    return new
 
 @app.route('/oauth2callback')
 def oauth2callback():
@@ -132,16 +135,42 @@ def getMessage(service,user_id,message_id):
         messageList = service.users().messages().get(userId = user_id, id = message_id, format = 'raw').execute()
         rawForm = base64.urlsafe_b64decode(messageList['raw'].encode('ASCII'))
         stringForm = email.message_from_bytes(rawForm)
-        fromPerson = deque(stringForm['From'].split(' '))
         fromEmails = []
-        badwordflag = True
-        curperson = ""
-        while fromPerson:
-            cur = fromPerson.popleft()
-            if '@' in cur:
-                if cur.split('@')[0] in badwords:
-                    badwordflag = False
+        if stringForm['From']:
+            fromPerson = deque(stringForm['From'].split(' '))
+            badwordflag = True
+            curperson = ""
+            while fromPerson:
+                cur = fromPerson.popleft()
+                if '@' in cur:
+                    if cur.split('@')[0] in badwords:
+                        badwordflag = False
+                    else:
+                        while cur and cur[0] not in letters:
+                            cur = cur[1:]
+                        while cur and cur[-1] not in letters:
+                            cur = cur[:-1]
+                        if curperson:
+                            while curperson and curperson[0] not in letters:
+                                curperson = curperson[1:]
+                            while curperson and curperson[-1] not in letters:
+                                curperson = curperson[:-1]
+                            if curperson:
+                                if curperson not in contactdict:
+                                    contactdict[curperson] = set([cur])
+                                else:
+                                    contactdict[curperson].add(cur)
+                            fromEmails.append(cur)
+                    curperson = ""
                 else:
+                    curperson+=cur+' '
+        toEmails = []
+        if stringForm['To']:
+            toPerson = deque(stringForm['To'].split(' '))
+            curperson = ""
+            while toPerson:
+                cur = toPerson.popleft()
+                if '@' in cur:
                     while cur and cur[0] not in letters:
                         cur = cur[1:]
                     while cur and cur[-1] not in letters:
@@ -156,34 +185,10 @@ def getMessage(service,user_id,message_id):
                                 contactdict[curperson] = set([cur])
                             else:
                                 contactdict[curperson].add(cur)
-                        fromEmails.append(cur)
-                curperson = ""
-            else:
-                curperson+=cur+' '
-        toPerson = deque(stringForm['To'].split(' '))
-        toEmails = []
-        curperson = ""
-        while toPerson:
-            cur = toPerson.popleft()
-            if '@' in cur:
-                while cur and cur[0] not in letters:
-                    cur = cur[1:]
-                while cur and cur[-1] not in letters:
-                    cur = cur[:-1]
-                if curperson:
-                    while curperson and curperson[0] not in letters:
-                        curperson = curperson[1:]
-                    while curperson and curperson[-1] not in letters:
-                        curperson = curperson[:-1]
-                    if curperson:
-                        if curperson not in contactdict:
-                            contactdict[curperson] = set([cur])
-                        else:
-                            contactdict[curperson].add(cur)
-                    toEmails.append(cur)
-                curperson = ""
-            else:
-                curperson+=cur+' '
+                        toEmails.append(cur)
+                    curperson = ""
+                else:
+                    curperson+=cur+' '
         hasGoogleMeet = False
         if badwordflag:
             emailSubject = stringForm['Subject']
@@ -237,15 +242,34 @@ def getMessage(service,user_id,message_id):
             date = stringForm['Date']
             #print (date, "ORIG")
             new = date.split(' ')
-            #print (new, "HRERE")
-            if new[0] in days:
-                secs = new[4].split(':')
-                date_time = datetime.datetime(int(new[3]),datedict[new[2]],int(new[1]),int(secs[0]),int(secs[1]),int(secs[2]))
-                regDate = datetime.date(int(new[3]),datedict[new[2]],int(new[1])) #year, month, day
-            else:
-                secs = new[3].split(':')
-                date_time = datetime.datetime(int(new[2]),datedict[new[1]], int(new[0]), int(secs[0]),int(secs[1]),int(secs[2]))
-                regDate = datetime.date(int(new[2]),datedict[new[1]],int(new[0])) #year, month, day
+            # print (new, "HRERE")
+            dayofWeek = None
+            year = None
+            month = None
+            day = None
+            secs = None
+            for x in new:
+                if x in days:
+                    dayofWeek = x[:-1]
+                elif x in datedict:
+                    month = datedict[x]
+                elif len(x) == 4 and (x[0] == '2' or x[1] == '1'):
+                    year = int(x)
+                elif len(x) == 2 or len(x) == 1:
+                    day = int(x)
+                elif ':' in x:
+                    secs = x
+                    secs = secs.split(':')
+            date_time = datetime.datetime(year,month,day,int(secs[0]),int(secs[1]),int(secs[2]))
+            regDate = datetime.date(year,month,day)
+            # if new[0] in days:
+            #     secs = new[4].split(':')
+            #     date_time = datetime.datetime(int(new[3]),datedict[new[2]],int(new[1]),int(secs[0]),int(secs[1]),int(secs[2]))
+            #     regDate = datetime.date(int(new[3]),datedict[new[2]],int(new[1])) #year, month, day
+            # else:
+            #     secs = new[3].split(':')
+            #     date_time = datetime.datetime(int(new[2]),datedict[new[1]], int(new[0]), int(secs[0]),int(secs[1]),int(secs[2]))
+            #     regDate = datetime.date(int(new[2]),datedict[new[1]],int(new[0])) #year, month, day
             unixTime = (time.mktime(date_time.timetuple()))
             if emailSubject:
                 if "Invitation" in emailSubject or "Updated Invitation" in emailSubject:
@@ -276,8 +300,8 @@ def getMessage(service,user_id,message_id):
 def searchMessages(service, user_id):
     try:
         mydict = {}
-        searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox", maxResults = 20000).execute() #get all emails in inbox
-        searchIDsent = service.users().messages().list(userId = user_id, q = "in:sent", maxResults = 20000).execute() #get emails that I sent
+        searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox", maxResults = 1000).execute() #get all emails in inbox
+        searchIDsent = service.users().messages().list(userId = user_id, q = "in:sent", maxResults = 1000).execute() #get emails that I sent
         def doThing(searchID, flag): #if flag = True, we're in inbox, look through from
             number_results = searchID['resultSizeEstimate']
             if number_results > 0:
@@ -390,5 +414,5 @@ if __name__ == '__main__':
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
     app.run('localhost', 8000)
     
-    # text = " fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex"
+    # 
     # print (classify(text))
