@@ -14,7 +14,7 @@ from collections import deque
 import datetime
 import time
 import tempfile
-
+import requests
 CLIENT_SECRETS_FILE = "credentials.json"
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 API_SERVICE_NAME = 'gmail'
@@ -27,9 +27,9 @@ datedict = {"Jan":1,"Feb":2, "Mar":3,"Apr":4, "May": 5, "Jun": 6, "Jul": 7, "Aug
 days = set(['Mon,', "Tue,", "Wed,", "Thu,", "Fri,", "Sat,", "Sun,"])
 badwords = set(["feedback", "hello", "news", "newsletters", "no-reply", "noreply", "notifications", "notification", "team", "support", "billing", "info", "help", "newsletter", "blog", "updates"])
 letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-
-@app.route('/')
-def authorize():
+ffflag = True
+@app.route('/<userID>')
+def authorize(userID):
     flow = Flow.from_client_secrets_file('credentials.json',scopes=['https://www.googleapis.com/auth/gmail.readonly'])
     cur_url = flask.url_for('oauth2callback', _external=True)
     # if "http:" in cur_url and "https:" not in cur_url:
@@ -39,13 +39,14 @@ def authorize():
     flow.token_uri = "https://oauth2.googleapis.com/token"
     authorization_url, state = flow.authorization_url(access_type='offline',include_granted_scopes='true')
     flask.session['state'] = state
+    flask.session['userID'] = userID
     return flask.redirect(authorization_url)
 
 @app.route('/getEmails')
 def get_request():
     if 'credentials' not in flask.session:
-        #return "HELO"
-        return flask.redirect('authorize')
+        newurl = flask.url_for('authorize')
+        return flask.redirect(newurl)
     credentials = Credentials(**flask.session['credentials'])
     service = build(API_SERVICE_NAME, API_VERSION, credentials=credentials)
     flask.session['credentials'] = credentials_to_dict(credentials)
@@ -63,15 +64,35 @@ def get_request():
     for x in newdict:
         if newdict[x][6] > 0:
             res[x] = newdict[x]
-    return res
+    userID = flask.session['userID']
+    # newdict = {}
+    # for x in res:
+    #     nlpdict = {}
+    #     newlist_id = res[x][8]
+    #     for message_id in newlist_id:
+    #         nlp = doClassify(service,"me",message_id)
+    #         if nlp:
+    #             for y in nlp:
+    #                 if y not in nlpdict:
+    #                     nlpdict[y] = [nlp[y],1]
+    #                 else:
+    #                     nlpdict[y][0]+=nlp[y]
+    #                     nlpdict[y][1]+=1
+    #     print (x, nlpdict)
+    bubble_url = "https://buckfifty.com/version-test/api/1.1/obj/connection"
+    for x in res:
+        myobj = {"Full Name": x, "last_contact": res[x][0],"email_1_month": res[x][1], 'email_6_months': res[x][2], 'email_1_year': res[x][3], 'email_2_years': res[x][4], 
+         'email_received': res[x][5], 'email_sent': res[x][6], 'meetings': res[x][7], 'Created By (custom)': userID, "Source": "Gmail"}
+        new = requests.post(bubble_url, json = myobj)
+    return "Successfully imported contacts, you may safely close this window"
 
-@app.route('/test')
-def test():
-    text = text = " fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex"
+@app.route('/test/<userID>')
+def test(userID):
+    # text = text = " fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex"
 
-    new = classify(text)
-    return new
-
+    # new = classify(text)
+    
+    return ("The userID is " + str(userID))
 @app.route('/oauth2callback')
 def oauth2callback():
     state = flask.session['state']
@@ -90,16 +111,15 @@ def oauth2callback():
     credentials = flow.credentials
     flask.session['credentials'] = credentials_to_dict(credentials)
     new_url = flask.url_for('get_request')
-    # if "http:" in new_url and "https:" not in new_url:
-    #     new_url = "https:" + new_url[5:]
-    # print (new_url, "FINAL")
     return flask.redirect(new_url)
 
 @app.route('/clear')
 def clear():
-  if 'credentials' in flask.session:
-    del flask.session['credentials']
-  return ('Credentials have been cleared')
+    if 'credentials' in flask.session:
+        del flask.session['credentials']
+    if 'userID' in flask.session:
+        del flask.session['userID']
+    return ('Credentials have been cleared')
 
 def credentials_to_dict(credentials):
   return {'token': credentials.token,
@@ -117,19 +137,36 @@ def classify(text, verbose=True):
     )
     response = language_client.classify_text(request={"document": document})
     categories = response.categories
-
     result = {}
-
     for category in categories:
         result[category.name] = category.confidence
-
-    # if verbose:
-    #     print(text)
-    #     for category in categories:
-    #         print("=" * 20)
-    #         print("{:<16}: {}".format("category", category.name))
-    #         print("{:<16}: {}".format("confidence", category.confidence))
     return result
+
+def doClassify(service, user_id, message_id):
+    messageList = service.users().messages().get(userId = user_id, id = message_id, format = 'raw').execute()
+    rawForm = base64.urlsafe_b64decode(messageList['raw'].encode('ASCII'))
+    stringForm = email.message_from_bytes(rawForm)
+    text = None
+    canClassify = False
+    nlp = None
+    for part in stringForm.walk():
+        stringForm.get_payload()
+        if part.get_content_type() == 'text/plain':
+            text = part.get_payload()
+    if text:
+        new = text.splitlines()
+        messageText = ""
+        for x in new:
+            if x:
+                messageText+=x+ ' '
+        messageText = messageText[:-1]
+        test = messageText.split(" ")
+        if len(test) >= 20:
+            canClassify = True
+    if canClassify:
+        nlp = classify(messageText)
+    return nlp
+
 def getMessage(service,user_id,message_id):
     try:
         messageList = service.users().messages().get(userId = user_id, id = message_id, format = 'raw').execute()
@@ -143,7 +180,8 @@ def getMessage(service,user_id,message_id):
             while fromPerson:
                 cur = fromPerson.popleft()
                 if '@' in cur:
-                    if cur.split('@')[0] in badwords:
+                    temp = cur.split('@')[0]
+                    if temp in badwords or 'support' in temp or 'help' in temp:
                         badwordflag = False
                     else:
                         while cur and cur[0] not in letters:
@@ -274,15 +312,7 @@ def getMessage(service,user_id,message_id):
             if emailSubject:
                 if "Invitation" in emailSubject or "Updated Invitation" in emailSubject:
                     hasGoogleMeet = True
-            contentTypes = stringForm.get_content_maintype()
-            if contentTypes == 'multipart':
-                messageBody = stringForm.get_payload()[0].get_payload()
-            else:
-                messageBody = stringForm.get_payload()
-            # if len(fromEmails) == 1 and fromEmails[0] == "anish@mellon.app":
-            #     #print (messageBody, "HERE")
-            #     x = classify(messageBody)
-            #     print (x, "HI")
+
             return (fromEmails, toEmails, unixTime, hasGoogleMeet, regDate)
         else:
             return (None, None, None, None, None)
@@ -300,8 +330,8 @@ def getMessage(service,user_id,message_id):
 def searchMessages(service, user_id):
     try:
         mydict = {}
-        searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox", maxResults = 1000).execute() #get all emails in inbox
-        searchIDsent = service.users().messages().list(userId = user_id, q = "in:sent", maxResults = 1000).execute() #get emails that I sent
+        searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox", maxResults = 200).execute() #get all emails in inbox
+        searchIDsent = service.users().messages().list(userId = user_id, q = "in:sent", maxResults = 200).execute() #get emails that I sent
         def doThing(searchID, flag): #if flag = True, we're in inbox, look through from
             number_results = searchID['resultSizeEstimate']
             if number_results > 0:
@@ -327,7 +357,8 @@ def searchMessages(service, user_id):
                                 elif dif <= 730:
                                     twoyear = True
                                 if email not in mydict:
-                                    #[last contact, last month, last 6 months, last year, last 2 years, totalreceived, totalsent, meetings]
+                                    #[last contact, last month, last 6 months, last year, last 2 years, totalreceived, totalsent, meetings, all messageIDs]
+                                    #mydict[email] = [lastcontactUnix,0,0,0,0,0,0,0,[msg_id]]
                                     mydict[email] = [lastcontactUnix,0,0,0,0,0,0,0]
                                     if onemonth:
                                         mydict[email][1]+=1
@@ -354,6 +385,7 @@ def searchMessages(service, user_id):
                                     mydict[email][5]+=1
                                     if hasGoogleMeet:
                                         mydict[email][7]+=1
+                                    #mydict[email][8].append(msg_id)
                     else: #if not flag, going through sent, so toEmail
                         if toEmails:
                             for email in toEmails:
@@ -373,6 +405,7 @@ def searchMessages(service, user_id):
                                     twoyear = True
                                 if email not in mydict:
                                     #[last contact, last month, last 6 months, last year, last 2 years, totalreceived, totalsent, meetings]
+                                    #mydict[email] = [lastcontactUnix,0,0,0,0,0,0,0, [msg_id]]
                                     mydict[email] = [lastcontactUnix,0,0,0,0,0,0,0]
                                     if onemonth:
                                         mydict[email][1]+=1
@@ -399,6 +432,7 @@ def searchMessages(service, user_id):
                                     mydict[email][6]+=1
                                     if hasGoogleMeet:
                                         mydict[email][1]+=1
+                                    #mydict[email][8].append(msg_id)
 
         
             else:
@@ -413,6 +447,3 @@ def searchMessages(service, user_id):
 if __name__ == '__main__':
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
     app.run('localhost', 8000)
-    
-    # 
-    # print (classify(text))
