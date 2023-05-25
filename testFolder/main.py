@@ -81,9 +81,9 @@ def get_request():
     #     print (x, nlpdict)
     bubble_url = "https://buckfifty.com/version-test/api/1.1/obj/connection"
     for x in res:
-        myobj = {"Full Name": x, "last_contact": res[x][0],"email_1_month": res[x][1], 'email_6_months': res[x][2], 'email_1_year': res[x][3], 'email_2_years': res[x][4], 
+        for_post = {"Full Name": x, "last_contact": res[x][0],"email_1_month": res[x][1], 'email_6_months': res[x][2], 'email_1_year': res[x][3], 'email_2_years': res[x][4], 
          'email_received': res[x][5], 'email_sent': res[x][6], 'meetings': res[x][7], 'Created By (custom)': userID, "Source": "Gmail"}
-        new = requests.post(bubble_url, json = myobj)
+        new = requests.post(bubble_url, json = for_post)
     return "Successfully imported contacts, you may safely close this window"
 
 @app.route('/test/<userID>')
