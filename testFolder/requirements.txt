@@ -12,3 +12,4 @@ google-cloud-vision==3.4.1
 googleapis-common-protos==1.59.0
 flask
 gunicorn
+requests

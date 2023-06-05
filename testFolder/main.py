@@ -30,6 +30,7 @@ letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 ffflag = True
 @app.route('/<userID>')
 def authorize(userID):
+    flask.session['userID'] = userID
     flow = Flow.from_client_secrets_file('credentials.json',scopes=['https://www.googleapis.com/auth/gmail.readonly'])
     cur_url = flask.url_for('oauth2callback', _external=True)
     # if "http:" in cur_url and "https:" not in cur_url:
@@ -39,7 +40,6 @@ def authorize(userID):
     flow.token_uri = "https://oauth2.googleapis.com/token"
     authorization_url, state = flow.authorization_url(access_type='offline',include_granted_scopes='true')
     flask.session['state'] = state
-    flask.session['userID'] = userID
     return flask.redirect(authorization_url)
 
 @app.route('/getEmails')
@@ -52,18 +52,27 @@ def get_request():
     flask.session['credentials'] = credentials_to_dict(credentials)
     mydict = searchMessages(service,"me")
     newdict = {}
+    # for x in mydict:
+    #     print (datetime.datetime.fromtimestamp(mydict[x][0]), "HERE")
     for name in contactdict:
-        newdict[name] = [float('inf'),0,0,0,0,0,0,0]
+        newdict[name] = [0,0,0,0,0,0,0,0]
         for email in contactdict[name]:
             if email in mydict:
                 arr = mydict[email]
-                newdict[name][0] = min(newdict[name][0],arr[0])
+                newdict[name][0] = max(newdict[name][0],arr[0])
                 for i in range (1, len(arr)):
                     newdict[name][i]+=arr[i]
     res = {}
     for x in newdict:
-        if newdict[x][6] > 0:
-            res[x] = newdict[x]
+        if newdict[x][6] > 0 and "Support" not in x:
+            if ',' in x:
+                name = x.split(',')
+                name[1] = name[1][1:]
+                name = name[1]+' '+name[0]
+            else:
+                name = x
+            res[name] = newdict[x]
+            res[name][0]*=1000
     userID = flask.session['userID']
     # newdict = {}
     # for x in res:
@@ -79,19 +88,20 @@ def get_request():
     #                     nlpdict[y][0]+=nlp[y]
     #                     nlpdict[y][1]+=1
     #     print (x, nlpdict)
-    bubble_url = "https://buckfifty.com/version-test/api/1.1/obj/connection"
+    bubble_url = "https://buckfifty.com/version-test/api/1.1/wf/create-or-update-connection/"
+    bearer_token = '725b8d6584b071a02e1316945bf7743b'
+    headers = {'Authorization': f'Bearer {bearer_token}'}
     for x in res:
-        for_post = {"Full Name": x, "last_contact": res[x][0],"email_1_month": res[x][1], 'email_6_months': res[x][2], 'email_1_year': res[x][3], 'email_2_years': res[x][4], 
-         'email_received': res[x][5], 'email_sent': res[x][6], 'meetings': res[x][7], 'Created By (custom)': userID, "Source": "Gmail"}
-        new = requests.post(bubble_url, json = for_post)
+        if 'utf' not in x:
+            for_post = {"Full Name": x, "last_contact": res[x][0],"email_1_month": res[x][1], 'email_6_months': res[x][2], 'email_1_year': res[x][3], 'email_2_years': res[x][4], 
+            'email_received': res[x][5], 'email_sent': res[x][6], 'meetings': res[x][7], 'Created By (custom)': flask.session['userID'], "Source": "Gmail", "Potential Key Relationship": "yes"}
+            new = requests.post(bubble_url, json = for_post, headers = headers)
+    if 'credentials' in flask.session:
+        del flask.session['credentials']
     return "Successfully imported contacts, you may safely close this window"
 
 @app.route('/test/<userID>')
 def test(userID):
-    # text = text = " fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex fuck sex"
-
-    # new = classify(text)
-    
     return ("The userID is " + str(userID))
 @app.route('/oauth2callback')
 def oauth2callback():
@@ -113,7 +123,6 @@ def oauth2callback():
     new_url = flask.url_for('get_request')
     return flask.redirect(new_url)
 
-@app.route('/clear')
 def clear():
     if 'credentials' in flask.session:
         del flask.session['credentials']
@@ -298,7 +307,7 @@ def getMessage(service,user_id,message_id):
                 elif ':' in x:
                     secs = x
                     secs = secs.split(':')
-            date_time = datetime.datetime(year,month,day,int(secs[0]),int(secs[1]),int(secs[2]))
+            date_time = datetime.datetime(year,month,day)
             regDate = datetime.date(year,month,day)
             # if new[0] in days:
             #     secs = new[4].split(':')
@@ -330,8 +339,8 @@ def getMessage(service,user_id,message_id):
 def searchMessages(service, user_id):
     try:
         mydict = {}
-        searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox", maxResults = 200).execute() #get all emails in inbox
-        searchIDsent = service.users().messages().list(userId = user_id, q = "in:sent", maxResults = 200).execute() #get emails that I sent
+        searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox", maxResults = 300).execute() #get all emails in inbox
+        searchIDsent = service.users().messages().list(userId = user_id, q = "in:sent", maxResults = 300).execute() #get emails that I sent
         def doThing(searchID, flag): #if flag = True, we're in inbox, look through from
             number_results = searchID['resultSizeEstimate']
             if number_results > 0:
