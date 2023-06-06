@@ -67,7 +67,7 @@ def get_calendar_info():
 
     return "SUCCESS"
 
-@app.route('/getEmails')
+@app.route('/getInfo')
 def get_request():
     if 'credentials' not in flask.session:
         newurl = flask.url_for('authorize')
@@ -112,8 +112,12 @@ def get_request():
         #                     nlpdict[y][0]+=nlp[y]
         #                     nlpdict[y][1]+=1
         #     print (x, nlpdict)
-        bubble_url = "https://buckfifty.com/version-test/api/1.1/wf/create-or-update-connection/"
-        bearer_token = '725b8d6584b071a02e1316945bf7743b'
+        if flask.session['version'] == 'test':
+            bubble_url = "https://buckfifty.com/version-test/api/1.1/wf/create-or-update-connection/"
+            bearer_token = '725b8d6584b071a02e1316945bf7743b'
+        else:
+            bubble_url = "https://buckfifty.com/api/1.1/wf/create-or-update-connection/"
+            bearer_token = "725b8d6584b071a02e1316945bf7743b"
         headers = {'Authorization': f'Bearer {bearer_token}'}
         for x in res:
             if 'utf' not in x:
@@ -128,27 +132,29 @@ def get_request():
         events_result = service.events().list(calendarId='primary', maxResults = 250).execute()
         events = events_result.get('items', [])
         # print (len(events))
-        c = 0
-        mydict = {}
+        mydict = {} #email address: [last_contact, count of meetings with email]
         for event in events:
             unixtime = 0
             if 'start' in event:
-                lastcontact = event['start']['dateTime']
-                dt = datetime.datetime.fromisoformat(lastcontact)
-                unixtime = time.mktime(dt.timetuple())
+                if 'dateTime' in event['start']:
+                    lastcontact = event['start']['dateTime']
+                    dt = datetime.datetime.fromisoformat(lastcontact)
+                    unixtime = time.mktime(dt.timetuple())
             # if 'summary' in event:
             #     print (event['summary'])
             if 'attendees' in event:
-                print (event['attendees'])
-            # if 'start' in event:
-            #     print (event['start'])
-            print ("............")
-            # if c < 5:
-            #     print (event)
-            #     print ("............")
-            c+=1
-        return "useriD"+flask.session['userID']+"option"+flask.session['option']+"version"+flask.session['version']
-    
+                for x in event['attendees']:
+                    email = x['email']
+                    if 'self' not in x:
+                        if email not in mydict:
+                            mydict[email] = [unixtime,1]
+                        else:
+                            mydict[email][0] = max(mydict[email][0],unixtime)
+                            mydict[email][1]+=1
+            # print (event)
+        if 'credentials' in flask.session:
+            del flask.session['credentials']
+        return mydict
 
 @app.route('/test/<name>&<val>')
 def test(name,val):
