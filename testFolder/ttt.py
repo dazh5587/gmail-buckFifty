@@ -16,7 +16,8 @@ import time
 import tempfile
 import requests
 CLIENT_SECRETS_FILE = "credentials.json"
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly','https://www.googleapis.com/auth/calendar.readonly']
+SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+
 app = Flask(__name__)
 app.secret_key = '_hkj97m_1j!!c7*n'
 contactdict = {}
@@ -25,12 +26,10 @@ days = set(['Mon,', "Tue,", "Wed,", "Thu,", "Fri,", "Sat,", "Sun,"])
 badwords = set(["feedback", "hello", "news", "newsletters", "no-reply", "noreply", "notifications", "notification", "team", "support", "billing", "info", "help", "newsletter", "blog", "updates"])
 letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 ffflag = True
-@app.route('/<userID>&<option>&<version>')
-def authorize(userID, option, version):
+@app.route('/<userID>')
+def authorize(userID):
     flask.session['userID'] = userID
-    flask.session['option'] = option
-    flask.session['version'] = version
-    flow = Flow.from_client_secrets_file('credentials.json',scopes=['https://www.googleapis.com/auth/gmail.readonly','https://www.googleapis.com/auth/calendar.readonly'])
+    flow = Flow.from_client_secrets_file('credentials.json',scopes=['https://www.googleapis.com/auth/gmail.readonly'])
     cur_url = flask.url_for('oauth2callback', _external=True)
     # if "http:" in cur_url and "https:" not in cur_url:
     #     cur_url = "https:" + cur_url[5:]
@@ -40,7 +39,7 @@ def authorize(userID, option, version):
     authorization_url, state = flow.authorization_url(access_type='offline',include_granted_scopes='true')
     flask.session['state'] = state
     return flask.redirect(authorization_url)
-
+    
 @app.route('/getCalendar')
 def get_calendar_info():
     if 'credentials' not in flask.session:
@@ -73,86 +72,61 @@ def get_request():
         newurl = flask.url_for('authorize')
         return flask.redirect(newurl)
     credentials = Credentials(**flask.session['credentials'])
+    service = build('gmail', 'v1', credentials=credentials)
     flask.session['credentials'] = credentials_to_dict(credentials)
-    if flask.session['option'] == 'g': #get gmail data
-        service = build('gmail', 'v1', credentials=credentials)
-        mydict = searchMessages(service,"me")
-        newdict = {}
-        for name in contactdict:
-            newdict[name] = [0,0,0,0,0,0,0,0]
-            for email in contactdict[name]:
-                if email in mydict:
-                    arr = mydict[email]
-                    newdict[name][0] = max(newdict[name][0],arr[0])
-                    for i in range (1, len(arr)):
-                        newdict[name][i]+=arr[i]
-        res = {}
-        for x in newdict:
-            if newdict[x][6] > 0 and "Support" not in x:
-                if ',' in x:
-                    name = x.split(',')
-                    name[1] = name[1][1:]
-                    name = name[1]+' '+name[0]
-                else:
-                    name = x
-                res[name] = newdict[x]
-                res[name][0]*=1000
-        userID = flask.session['userID']
-        # newdict = {}
-        # for x in res:
-        #     nlpdict = {}
-        #     newlist_id = res[x][8]
-        #     for message_id in newlist_id:
-        #         nlp = doClassify(service,"me",message_id)
-        #         if nlp:
-        #             for y in nlp:
-        #                 if y not in nlpdict:
-        #                     nlpdict[y] = [nlp[y],1]
-        #                 else:
-        #                     nlpdict[y][0]+=nlp[y]
-        #                     nlpdict[y][1]+=1
-        #     print (x, nlpdict)
-        bubble_url = "https://buckfifty.com/version-test/api/1.1/wf/create-or-update-connection/"
-        bearer_token = '725b8d6584b071a02e1316945bf7743b'
-        headers = {'Authorization': f'Bearer {bearer_token}'}
-        for x in res:
-            if 'utf' not in x:
-                for_post = {"Full Name": x, "last_contact": res[x][0],"email_1_month": res[x][1], 'email_6_months': res[x][2], 'email_1_year': res[x][3], 'email_2_years': res[x][4], 
-                'email_received': res[x][5], 'email_sent': res[x][6], 'meetings': res[x][7], 'Created By (custom)': flask.session['userID'], "Source": "Gmail", "Potential Key Relationship": "yes"}
-                new = requests.post(bubble_url, json = for_post, headers = headers)
-        if 'credentials' in flask.session:
-            del flask.session['credentials']
-        return "Successfully imported contacts, you may safely close this window"
-    if flask.session['option'] == 'c': #get calendar data
-        service = build('calendar', 'v3', credentials=credentials)
-        events_result = service.events().list(calendarId='primary', maxResults = 250).execute()
-        events = events_result.get('items', [])
-        # print (len(events))
-        c = 0
-        mydict = {}
-        for event in events:
-            unixtime = 0
-            if 'start' in event:
-                lastcontact = event['start']['dateTime']
-                dt = datetime.datetime.fromisoformat(lastcontact)
-                unixtime = time.mktime(dt.timetuple())
-            # if 'summary' in event:
-            #     print (event['summary'])
-            if 'attendees' in event:
-                print (event['attendees'])
-            # if 'start' in event:
-            #     print (event['start'])
-            print ("............")
-            # if c < 5:
-            #     print (event)
-            #     print ("............")
-            c+=1
-        return "useriD"+flask.session['userID']+"option"+flask.session['option']+"version"+flask.session['version']
-    
+    mydict = searchMessages(service,"me")
+    newdict = {}
+    # for x in mydict:
+    #     print (datetime.datetime.fromtimestamp(mydict[x][0]), "HERE")
+    for name in contactdict:
+        newdict[name] = [0,0,0,0,0,0,0,0]
+        for email in contactdict[name]:
+            if email in mydict:
+                arr = mydict[email]
+                newdict[name][0] = max(newdict[name][0],arr[0])
+                for i in range (1, len(arr)):
+                    newdict[name][i]+=arr[i]
+    res = {}
+    for x in newdict:
+        if newdict[x][6] > 0 and "Support" not in x:
+            if ',' in x:
+                name = x.split(',')
+                name[1] = name[1][1:]
+                name = name[1]+' '+name[0]
+            else:
+                name = x
+            res[name] = newdict[x]
+            res[name][0]*=1000
+    userID = flask.session['userID']
+    # newdict = {}
+    # for x in res:
+    #     nlpdict = {}
+    #     newlist_id = res[x][8]
+    #     for message_id in newlist_id:
+    #         nlp = doClassify(service,"me",message_id)
+    #         if nlp:
+    #             for y in nlp:
+    #                 if y not in nlpdict:
+    #                     nlpdict[y] = [nlp[y],1]
+    #                 else:
+    #                     nlpdict[y][0]+=nlp[y]
+    #                     nlpdict[y][1]+=1
+    #     print (x, nlpdict)
+    bubble_url = "https://buckfifty.com/version-test/api/1.1/wf/create-or-update-connection/"
+    bearer_token = '725b8d6584b071a02e1316945bf7743b'
+    headers = {'Authorization': f'Bearer {bearer_token}'}
+    for x in res:
+        if 'utf' not in x:
+            for_post = {"Full Name": x, "last_contact": res[x][0],"email_1_month": res[x][1], 'email_6_months': res[x][2], 'email_1_year': res[x][3], 'email_2_years': res[x][4], 
+            'email_received': res[x][5], 'email_sent': res[x][6], 'meetings': res[x][7], 'Created By (custom)': flask.session['userID'], "Source": "Gmail", "Potential Key Relationship": "yes"}
+            new = requests.post(bubble_url, json = for_post, headers = headers)
+    if 'credentials' in flask.session:
+        del flask.session['credentials']
+    return "Successfully imported contacts, you may safely close this window"
 
-@app.route('/test/<name>&<val>')
-def test(name,val):
-    return (name+val)
+@app.route('/test/<userID>')
+def test(userID):
+    return ("The userID is " + str(userID))
 
 @app.route('/oauth2callback')
 def oauth2callback():
@@ -360,6 +334,14 @@ def getMessage(service,user_id,message_id):
                     secs = secs.split(':')
             date_time = datetime.datetime(year,month,day)
             regDate = datetime.date(year,month,day)
+            # if new[0] in days:
+            #     secs = new[4].split(':')
+            #     date_time = datetime.datetime(int(new[3]),datedict[new[2]],int(new[1]),int(secs[0]),int(secs[1]),int(secs[2]))
+            #     regDate = datetime.date(int(new[3]),datedict[new[2]],int(new[1])) #year, month, day
+            # else:
+            #     secs = new[3].split(':')
+            #     date_time = datetime.datetime(int(new[2]),datedict[new[1]], int(new[0]), int(secs[0]),int(secs[1]),int(secs[2]))
+            #     regDate = datetime.date(int(new[2]),datedict[new[1]],int(new[0])) #year, month, day
             unixTime = (time.mktime(date_time.timetuple()))
             if emailSubject:
                 if "Invitation" in emailSubject or "Updated Invitation" in emailSubject:
