@@ -41,31 +41,6 @@ def authorize(userID, option, version):
     flask.session['state'] = state
     return flask.redirect(authorization_url)
 
-@app.route('/getCalendar')
-def get_calendar_info():
-    if 'credentials' not in flask.session:
-        newurl = flask.url_for('authorize')
-        return flask.redirect(newurl)
-    credentials = Credentials(**flask.session['credentials'])
-    service = build('calendar', 'v3', credentials=credentials)
-    flask.session['credentials'] = credentials_to_dict(credentials)
-    now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
-    print('Getting the upcoming 10 events')
-    events_result = service.events().list(calendarId='primary', timeMin=now,
-                                            maxResults=10, singleEvents=True,
-                                            orderBy='startTime').execute()
-    events = events_result.get('items', [])
-
-    if not events:
-        print('No upcoming events found.')
-        return
-
-    # Prints the start and name of the next 10 events
-    for event in events:
-        start = event['start'].get('dateTime', event['start'].get('date'))
-        print(start, event['summary'])
-
-    return "SUCCESS"
 
 @app.route('/getInfo')
 def get_request():
@@ -129,29 +104,7 @@ def get_request():
         return "Successfully imported contacts, you may safely close this window"
     if flask.session['option'] == 'c': #get calendar data
         service = build('calendar', 'v3', credentials=credentials)
-        events_result = service.events().list(calendarId='primary', maxResults = 250).execute()
-        events = events_result.get('items', [])
-        # print (len(events))
-        mydict = {} #email address: [last_contact, count of meetings with email]
-        for event in events:
-            unixtime = 0
-            if 'start' in event:
-                if 'dateTime' in event['start']:
-                    lastcontact = event['start']['dateTime']
-                    dt = datetime.datetime.fromisoformat(lastcontact)
-                    unixtime = time.mktime(dt.timetuple())
-            # if 'summary' in event:
-            #     print (event['summary'])
-            if 'attendees' in event:
-                for x in event['attendees']:
-                    email = x['email']
-                    if 'self' not in x:
-                        if email not in mydict:
-                            mydict[email] = [unixtime,1]
-                        else:
-                            mydict[email][0] = max(mydict[email][0],unixtime)
-                            mydict[email][1]+=1
-            # print (event)
+        mydict = get_calendar_info(service)
         if 'credentials' in flask.session:
             del flask.session['credentials']
         return mydict
@@ -195,6 +148,30 @@ def credentials_to_dict(credentials):
           'client_secret': credentials.client_secret,
           'scopes': credentials.scopes}
 
+def get_calendar_info(service):
+    events_result = service.events().list(calendarId='primary', maxResults = 250).execute()
+    events = events_result.get('items', [])
+    # print (len(events))
+    mydict = {} #email address: [last_contact, count of meetings with email]
+    for event in events:
+        unixtime = 0
+        if 'start' in event:
+            if 'dateTime' in event['start']:
+                lastcontact = event['start']['dateTime']
+                dt = datetime.datetime.fromisoformat(lastcontact)
+                unixtime = time.mktime(dt.timetuple())
+        # if 'summary' in event:
+        #     print (event['summary'])
+        if 'attendees' in event:
+            for x in event['attendees']:
+                email = x['email']
+                if 'self' not in x:
+                    if email not in mydict:
+                        mydict[email] = [unixtime,1]
+                    else:
+                        mydict[email][0] = max(mydict[email][0],unixtime)
+                        mydict[email][1]+=1
+    return mydict
 def classify(text, verbose=True):
     language_client = language_v1.LanguageServiceClient()
 
