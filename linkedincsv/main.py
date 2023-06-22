@@ -1,58 +1,118 @@
 import flask
 from flask import Flask, redirect, url_for, request
 import requests
-import pandas as pd
-import csv
 import zipfile
 import io
+
 app = Flask(__name__)
 app.secret_key = '_hkj97m_1j!!c7*n'
 letters = set('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz')
 titles = set(["mba","cpa","phd", "md","jd", "pmp","cfa","cfp", "cma", "pe", "cissp", "phr", "cfe", "cirsc", "cisa", "eit", "cfp", "ca", "ea"])
+# @app.route('/')
+# def test():
+#     urlzip = "https://buckfifty.com/version-test/fileupload/f1687367317489x356895471459457660/Basic_LinkedInDataExport_06-19-2023.zip"
+#     url = "https://buckfifty.com/version-test/fileupload/f1687367486649x712366247971640800/Connections.csv"
+#     newdict = getInfoZIP(urlzip)
+
 @app.route('/test',methods = ['POST', 'GET'])
 def main():
-   if request.method == 'POST':
-       data = request.form
-       userID = data['user_id']
-       fileURL = data['file']
-       url = "https://buckfifty.com/version-test/fileupload/f1687367486649x712366247971640800/Connections.csv"
-       urlcsv = "https://buckfifty.com/version-test/fileupload/f1687367317489x356895471459457660/Basic_LinkedInDataExport_06-19-2023.zip"
-       newnames = getInfoZIP(fileURL)
-       newdict = {}
-       for x in data:
-           newdict[x] = data[x]
-       return newdict
+    if request.method == 'POST':
+        data = request.form
+        userID = data['user_id']
+        fileURL = data['file']
+        version = data['version'] #if yes, its staging, if no its live
+        if version == "yes":
+            bubble_url = "https://buckfifty.com/version-test/api/1.1/wf/linkedin-import-in-progress/"
+            bearer_token = '725b8d6584b071a02e1316945bf7743b'
+            headers = {'Authorization': f'Bearer {bearer_token}'}
+            for_post = {'user': userID, "status": "yes"}
+            new = requests.post(bubble_url, json = for_post, headers = headers)
+        else:
+            bubble_url = "https://buckfifty.com/api/1.1/wf/linkedin-import-in-progress/"
+            bearer_token = '725b8d6584b071a02e1316945bf7743b'
+            headers = {'Authorization': f'Bearer {bearer_token}'}
+            for_post = {'user': userID, "status": "yes"}
+            new = requests.post(bubble_url, json = for_post, headers = headers)
+        mydict = {}
+        if 'csv' in fileURL:
+            if 'connections' in fileURL or "Connections" in fileURL:
+                mydict = getInfoCSVConnections(fileURL)
+            elif "messages" in fileURL or "Messages" in fileURL:
+                mydict = getInfoCSVMessages(fileURL)
+            else:
+                mydict = getInfoCSVRecs(fileURL)
+        else:
+            mydict = getInfoZIP(fileURL)
+        if version == "yes": #testing
+            bubble_url = "https://buckfifty.com/version-test/api/1.1/wf/create-or-update-connection/"
+            bearer_token = "725b8d6584b071a02e1316945bf7743b"
+        else:
+            bubble_url = "https://buckfifty.com/api/1.1/wf/create-or-update-connection/"
+            bearer_token = "725b8d6584b071a02e1316945bf7743b"
+        headers = {'Authorization': f'Bearer {bearer_token}'}
+        odict = {True:'yes', False:'no'}
+        for x in res:
+            for_post = {"Full Name": x, "LI_messages_to": res[x][1],"LI_messages_from": res[x][0],"LI_recommendations": res[x][2],'Created By (custom)': userID, "Source": "LinkedIn", "Potential Key Relationship": odict[res[x][3]]}
+            new = requests.post(bubble_url, json = for_post, headers = headers)
+        if version == "yes":
+            bubble_url = "https://buckfifty.com/version-test/api/1.1/wf/linkedin-import-in-progress/"
+            bearer_token = '725b8d6584b071a02e1316945bf7743b'
+            headers = {'Authorization': f'Bearer {bearer_token}'}
+            for_post = {'user': userID, "status": "no"}
+            new = requests.post(bubble_url, json = for_post, headers = headers)
+        else:
+            bubble_url = "https://buckfifty.com/api/1.1/wf/linkedin-import-in-progress/"
+            bearer_token = '725b8d6584b071a02e1316945bf7743b'
+            headers = {'Authorization': f'Bearer {bearer_token}'}
+            for_post = {'user': userID, "status": "no"}
+            new = requests.post(bubble_url, json = for_post, headers = headers)
+       return "Done syncing"
    else:
        return "GET"
 
 def getInfoZIP(url):
-    req = requests.get(urlcsv, stream = True)
+    req = requests.get(url, stream = True)
     z = zipfile.ZipFile(io.BytesIO(req.content))
     namelist = z.namelist()
     count = 0
     initconnection = True
+    namedict = {} #name: messages from, messages to, recommendations, Potential KR
     for filename in namelist:
         for line in z.open(filename).readlines():
             curline = line.decode('utf-8')
             if filename == 'messages.csv' or filename == 'Messages.csv':
-                continue
-                # temp = curline.split(',')
-                # c = 0
-                # prev = None
-                # namefrom = None
-                # nameto = None
-                # for x in temp:
-                #     if "https://www.linkedin.com/in/" in x:
-                #         if c == 0:
-                #             namefrom = prev
-                #             c+=1
-                #         elif c == 1:
-                #             nameto = prev
-                #     prev = x
-                # if namefrom and nameto:
-                #     print (namefrom)
-                #     print (nameto)
-                #     print ("...........")
+                temp = curline.split(',')
+                c = 0
+                prev = None
+                namefrom = None
+                nameto = None
+                for x in temp:
+                    x = x.lower()
+                    if "https://www.linkedin.com/in/" in x:
+                        if c == 0:
+                            namefrom = prev
+                            c+=1
+                        elif c == 1:
+                            nameto = prev
+                    while x and x[0] not in letters:
+                        x = x[1:]
+                    while x and x[-1] not in letters:
+                        x = x[:-1]
+                    if x not in titles:
+                        prev = x
+                if namefrom and nameto:
+                    namefrom = namefrom.title()
+                    nameto = nameto.title()
+                    if namefrom not in namedict:
+                        namedict[namefrom] = [1,0,0, True]
+                    else:
+                        namedict[namefrom][0]+=1
+                        namedict[namefrom][3] = True
+                    if nameto not in namedict:
+                        namedict[nameto] = [0,1,0,True]
+                    else:
+                        namedict[nameto][1]+=1
+                        namedict[nameto][3] = True
             if filename == 'Recommendations_Given.csv' or filename == 'recommendations_given.csv' or filename == "Recommendations_Received.csv" or filename == "recommendations_received.csv":
                 temp = curline.split(',')
                 if len(temp) > 2:
@@ -60,6 +120,11 @@ def getInfoZIP(url):
                     lastname = temp[1]
                     if firstname != 'First Name' and lastname != 'Last Name':
                         normalized = normalizeName(firstname,lastname)
+                        if normalized not in namedict:
+                            namedict[normalized] = [0,0,1,True]
+                        else:
+                            namedict[normalized][2]+=1
+                            namedict[normalized][3] = True
             if filename == 'Connections.csv' or filename == 'connections.csv':
                 temp = curline.split(',')
                 if len(temp) >= 2:
@@ -68,16 +133,18 @@ def getInfoZIP(url):
                     if firstname and lastname and firstname != 'First Name' and lastname != 'Last Name':
                         if not initconnection:
                             normalized = normalizeName(firstname,lastname)
+                            if normalized not in namedict:
+                                namedict[normalized] = [0,0,0,False]
                             count+=1
                         initconnection = False
-    return "HELLO TESTING POST REQUESTS"
-def getInfoCSV(url):
+    return namedict
+def getInfoCSVConnections(url):
     req = requests.get(url)
     content = req.content
     new = str(content)
     new1 = new.split("\\n")
     count = 0
-    nameres = []
+    namedict = {}
     for x in new1:
         temp = x.split(',')
         if len(temp) >= 2:
@@ -85,10 +152,70 @@ def getInfoCSV(url):
             lastname = temp[1]
             if firstname and lastname:
                 normalized = normalizeName(firstname,lastname)
-                nameres.append(normalized)
+                if normalized not in namedict:
+                    namedict[normalized] = [0,0,0,False]
                 count+=1
-    return nameres
-    
+    return namedict
+
+def getInfoCSVRecs(url):
+    req = requests.get(url)
+    content = req.content
+    new = str(content)
+    new1 = new.split("\\n")
+    count = 0
+    namedict = {}
+    for x in new1:
+        temp = x.split(',')
+        if len(temp) >= 2:
+            firstname = temp[0]
+            lastname = temp[1]
+            if firstname and lastname:
+                normalized = normalizeName(firstname,lastname)
+                if normalized not in namedict:
+                    namedict[normalized] = [0,0,0,False]
+                count+=1
+    return namedict
+
+def getInfoCSVMessages(url):
+    req = requests.get(url)
+    content = req.content
+    new = str(content)
+    new1 = new.split("\\n")
+    namedict = {}
+    for y in new1:
+        c = 0
+        prev = None
+        namefrom = None
+        nameto = None
+        temp = y.split(',')
+        for x in temp:
+            x = x.lower()
+            if "https://www.linkedin.com/in/" in x:
+                if c == 0:
+                    namefrom = prev
+                    c+=1
+                elif c == 1:
+                    nameto = prev
+            while x and x[0] not in letters:
+                x = x[1:]
+            while x and x[-1] not in letters:
+                x = x[:-1]
+            if x not in titles:
+                prev = x
+        if namefrom and nameto:
+            namefrom = namefrom.title()
+            nameto = nameto.title()
+            if namefrom not in namedict:
+                namedict[namefrom] = [1,0,0, True]
+            else:
+                namedict[namefrom][0]+=1
+                namedict[namefrom][3] = True
+            if nameto not in namedict:
+                namedict[nameto] = [0,1,0,True]
+            else:
+                namedict[nameto][1]+=1
+                namedict[nameto][3] = True
+    return namedict
 def normalizeName(firstname,lastname):
     #take in 2 strings
     #firstname = \xe2\x98\x85\xe2\x98\x85\xe2\x98\x85 Klaas 
