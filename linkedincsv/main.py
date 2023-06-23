@@ -51,8 +51,8 @@ def main():
             bearer_token = "725b8d6584b071a02e1316945bf7743b"
         headers = {'Authorization': f'Bearer {bearer_token}'}
         odict = {True:'yes', False:'no'}
-        for x in res:
-            for_post = {"Full Name": x, "LI_messages_to": res[x][1],"LI_messages_from": res[x][0],"LI_recommendations": res[x][2],'Created By (custom)': userID, "Source": "LinkedIn", "Potential Key Relationship": odict[res[x][3]]}
+        for x in mydict:
+            for_post = {"Full Name": x, "LI_messages_to": mydict[x][1],"LI_messages_from": mydict[x][0],"LI_recommendations": mydict[x][2],'Created By (custom)': userID, "Source": "LinkedIn", "Potential Key Relationship": odict[mydict[x][3]]}
             new = requests.post(bubble_url, json = for_post, headers = headers)
         if version == "yes":
             bubble_url = "https://buckfifty.com/version-test/api/1.1/wf/linkedin-import-in-progress/"
@@ -66,8 +66,8 @@ def main():
             headers = {'Authorization': f'Bearer {bearer_token}'}
             for_post = {'user': userID, "status": "no"}
             new = requests.post(bubble_url, json = for_post, headers = headers)
-       return "Done syncing"
-   else:
+        return mydict
+    else:
        return "GET"
 
 def getInfoZIP(url):
@@ -216,6 +216,7 @@ def getInfoCSVMessages(url):
                 namedict[nameto][1]+=1
                 namedict[nameto][3] = True
     return namedict
+
 def normalizeName(firstname,lastname):
     #take in 2 strings
     #firstname = \xe2\x98\x85\xe2\x98\x85\xe2\x98\x85 Klaas 
