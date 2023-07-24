@@ -13,7 +13,6 @@ import json
 from collections import deque
 import datetime
 import time
-import tempfile
 import requests
 
 CLIENT_SECRETS_FILE = "credentials.json"
@@ -26,6 +25,7 @@ days = set(['Mon,', "Tue,", "Wed,", "Thu,", "Fri,", "Sat,", "Sun,"])
 badwords = set(["feedback", "hello", "news", "newsletters", "no-reply", "noreply", "notifications", "notification", "team", "support", "billing", "info", "help", "newsletter", "blog", "updates"])
 letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 ffflag = True
+
 @app.route('/<userID>&<option>&<version>')
 def authorize(userID, option, version):
     flask.session['userID'] = userID
@@ -33,8 +33,6 @@ def authorize(userID, option, version):
     flask.session['version'] = version
     flow = Flow.from_client_secrets_file('credentials.json',scopes=['https://www.googleapis.com/auth/gmail.readonly','https://www.googleapis.com/auth/calendar.readonly'])
     cur_url = flask.url_for('oauth2callback', _external=True)
-    # if "http:" in cur_url and "https:" not in cur_url:
-    #     cur_url = "https:" + cur_url[5:]
     flow.redirect_uri = cur_url
     flow.auth_uri = "https://accounts.google.com/o/oauth2/auth"
     flow.token_uri = "https://oauth2.googleapis.com/token"
@@ -44,10 +42,11 @@ def authorize(userID, option, version):
 
 @app.route('/getInfo')
 def get_request():
-    print ("1. LOGS ARE HERE BUDDY")
+    print ("1. LOGS ARE HERE BUDDY VERSION 3.0")
     if 'credentials' not in flask.session:
         print ("HELLO FUCKER")
-        newurl = flask.url_for('authorize')
+        #newurl = flask.url_for('authorize')
+        newurl = flask.url_for('authorize', userID=flask.session['userID'],option=flask.session['option'],version=flask.session['version'])
         return flask.redirect(newurl)
     credentials = Credentials(**flask.session['credentials'])
     flask.session['credentials'] = credentials_to_dict(credentials)
@@ -63,9 +62,7 @@ def get_request():
         headers = {'Authorization': f'Bearer {bearer_token}'}
         for_post = {'user': flask.session['userID'], "status": "yes"}
         new = requests.post(bubble_url, json = for_post, headers = headers)
-    print ("GOT HERE (AFTER #1)")
     service = build('gmail', 'v1', credentials=credentials)
-    print ("AND GOOD HERE")
     mydict = searchMessages(service,"me")
     print ("4. In get_request successfully")
     if flask.session['version'] == 'test': #calendar data as well for testing right now
@@ -129,11 +126,9 @@ def get_request():
         bearer_token = "725b8d6584b071a02e1316945bf7743b"
     headers = {'Authorization': f'Bearer {bearer_token}'}
     for x in res:
-        if 'utf' not in x:
+        if 'utf' not in x and "Utf" not in x and "?" not in x:
             for_post = {"Full Name": x, "last_contact": res[x][0]*1000,"email_1_month": res[x][1], 'email_6_months': res[x][2], 'email_1_year': res[x][3], 'email_2_years': res[x][4], 
             'email_received': res[x][5], 'email_sent': res[x][6], 'meetings': res[x][7], 'Created By (custom)': flask.session['userID'], "Source": "Gmail", "Potential Key Relationship": "yes"}
-            # print ("!-----------!")
-            # print (for_post)
             new = requests.post(bubble_url, json = for_post, headers = headers)
 
     if flask.session['version'] == 'test':
@@ -152,6 +147,12 @@ def get_request():
     print ("---DONE----")
     if 'credentials' in flask.session:
         del flask.session['credentials']
+    if 'userID' in flask.session:
+        del flask.session['userID']
+    if 'option' in flask.session:
+        del flask.session['option']
+    if 'version' in flask.session:
+        del flask.session['version']
     return "Successfully imported contacts, you may safely close this window"
 
     # if flask.session['option'] == 'c': #get calendar data
@@ -168,13 +169,9 @@ def oauth2callback():
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE, scopes=SCOPES, state=state)
     cur_url = flask.url_for('oauth2callback', _external=True)
-    # if "http:" in cur_url and "https:" not in cur_url:
-    #     cur_url = "https:" + cur_url[5:]
     flow.redirect_uri = cur_url
     # Use the authorization server's response to fetch the OAuth 2.0 tokens.
     authorization_response = flask.request.url
-    # if "http:" in authorization_response and "https:" not in authorization_response:
-    #     authorization_response = "https:" + authorization_response[5:]
     flow.fetch_token(authorization_response=authorization_response)
     credentials = flow.credentials
     flask.session['credentials'] = credentials_to_dict(credentials)
@@ -209,8 +206,6 @@ def get_calendar_info(service):
                 dt = datetime.datetime.fromisoformat(lastcontact)
                 unixtime = time.mktime(dt.timetuple())
                 # unixtime*=1000
-        # if 'summary' in event:
-        #     print (event['summary'])
         if 'attendees' in event:
             for x in event['attendees']:
                 email = x['email']
@@ -259,12 +254,18 @@ def doClassify(service, user_id, message_id):
         nlp = classify(messageText)
     return nlp
 
-def getMessage(service,user_id,message_id):
+def getMessage(service,user_id,message_id,flag):
     try:
         messageList = service.users().messages().get(userId = user_id, id = message_id, format = 'raw').execute()
         rawForm = base64.urlsafe_b64decode(messageList['raw'].encode('ASCII'))
         stringForm = email.message_from_bytes(rawForm)
         fromEmails = []
+        # if flag == False:
+            # print ("IN SENT EMAILS")
+            # print ("FROM: ", stringForm['From'])
+            # print ("TO: ", stringForm['To'])
+            # print ("Date: ", stringForm['Date'])
+            # print (".................")
         if stringForm['From']:
             fromPerson = deque(stringForm['From'].split(' '))
             badwordflag = True
@@ -321,7 +322,7 @@ def getMessage(service,user_id,message_id):
                     curperson+=cur+' '
         hasGoogleMeet = False
         if badwordflag:
-            emailSubject = stringForm['Subject']
+            # emailSubject = stringForm['Subject']
             bcc = stringForm['Bcc']
             curperson = ""
             if bcc:
@@ -334,11 +335,15 @@ def getMessage(service,user_id,message_id):
                         while cur and cur[-1] not in letters:
                             cur = cur[:-1]
                         if curperson:
-                            curperson = curperson[:-1]
-                            if curperson not in contactdict:
-                                contactdict[curperson] = set([cur])
-                            else:
-                                contactdict[curperson].add(cur)
+                            while curperson and curperson[0] not in letters:
+                                curperson = curperson[1:]
+                            while curperson and curperson[-1] not in letters:
+                                curperson = curperson[:-1]
+                            if curperson:
+                                if curperson not in contactdict:
+                                    contactdict[curperson] = set([cur])
+                                else:
+                                    contactdict[curperson].add(cur)
                             toEmails.append(cur)
                         curperson = ""
                     else:
@@ -346,7 +351,13 @@ def getMessage(service,user_id,message_id):
             cc = stringForm['Cc']
             curperson = ""
             if cc:
+            #     print ("*******")
+            #     print ("WE HAVE REGULAR CC ")
+            #     print ("*******")
                 cc = deque(cc.split(' '))
+                # print ("!!!!!")
+                # print ("cc: ", cc)
+                # print ("!!!!!")
                 while cc:
                     cur = cc.popleft()
                     if '@' in cur:
@@ -387,29 +398,34 @@ def getMessage(service,user_id,message_id):
                 elif ':' in x:
                     secs = x
                     secs = secs.split(':')
-            date_time = datetime.datetime(year,month,day)
-            regDate = datetime.date(year,month,day)
-            unixTime = (time.mktime(date_time.timetuple()))
+            date_time = None
+            regDate = None
+            unixTime = 0
+            if year and month and day:
+                date_time = datetime.datetime(year,month,day)
+                regDate = datetime.date(year,month,day)
+                unixTime = (time.mktime(date_time.timetuple()))
             return (fromEmails, toEmails, unixTime, hasGoogleMeet, regDate)
         else:
             return (None, None, None, None, None)
-    except HttpError as error:
-        print ("Error Occured: %s") %error
+    except:
+        return (None, None, None, None, None)
 
 def searchMessages(service, user_id):
     try:
-        print ("--1--")
         mydict = {}
-        searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox", maxResults = 500).execute() #get all emails in inbox
+        searchIDinbox = service.users().messages().list(userId = user_id, q = "label:inbox").execute() #get all emails in inbox
         searchIDsent = service.users().messages().list(userId = user_id, q = "in:sent").execute() #get emails that I sent
-        print ("--2--")
         def doThing(searchID, flag): #if flag = True, we're in inbox, look through from
             number_results = searchID['resultSizeEstimate']
             if number_results > 0:
                 message_ids = searchID['messages']
                 for ids in message_ids:
                     msg_id = ids['id']
-                    fromEmails,toEmails,lastcontactUnix,hasGoogleMeet,regDate = getMessage(service,user_id,msg_id)
+                    try:
+                        fromEmails,toEmails,lastcontactUnix,hasGoogleMeet,regDate = getMessage(service,user_id,msg_id,flag)
+                    except:
+                        fromEmails,toEmails,lastcontactUnix,hasGoogleMeet,regDate = None,None,None,None,None
                     # print ('--3--')
                     # print (fromEmails,toEmails,lastcontactUnix,hasGoogleMeet,regDate)
                     if flag and lastcontactUnix and regDate: #going through inbox (so fromEmails)
@@ -502,19 +518,16 @@ def searchMessages(service, user_id):
                                     mydict[email][6]+=1
                                     if hasGoogleMeet:
                                         mydict[email][7]+=1
-                print ("DONE DONE")
             else:
                 print ("Empty inbox")
         doThing(searchIDinbox, True)
         print ("DID INBOX")
         doThing(searchIDsent, False)
         print ("DID SENT")
-        print ("NEWEST!")
         return mydict
+    except:
+        return {}
 
-    except HttpError as error:
-        print ("Error Occured: %s") %error
-
-if __name__ == '__main__':
-    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
-    app.run('localhost', 8000)
+# if __name__ == '__main__':
+#     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+#     app.run('localhost', 8000)

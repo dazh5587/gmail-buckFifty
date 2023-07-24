@@ -15,3 +15,4 @@ gunicorn
 requests
 python-dateutil
 zipp==3.15.0
+pandas
